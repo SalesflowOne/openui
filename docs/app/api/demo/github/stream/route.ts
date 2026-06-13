@@ -2,6 +2,7 @@ import {
   createDemoCreditsExhaustedResponse,
   isDemoCreditsExhaustedError,
 } from "@/lib/demo-credits";
+import { missingLlmProviderError, resolveLlmProvider } from "@/lib/llm-client";
 import { BASE_URL } from "@/lib/source";
 import { generatePrompt, type PromptSpec } from "@openuidev/lang-core";
 import { readFileSync } from "fs";
@@ -60,24 +61,16 @@ export async function POST(req: NextRequest) {
   }
   chatMessages.push({ role: "user", content: prompt });
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: { message: "OPENROUTER_API_KEY not configured" } },
-      { status: 500 },
-    );
+  const llm = resolveLlmProvider();
+  if (!llm) {
+    return missingLlmProviderError();
   }
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const res = await fetch(llm.chatCompletionsUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": `${BASE_URL}/demo/github`,
-      "X-Title": "OpenUI GitHub Demo",
-    },
+    headers: llm.headers(`${BASE_URL}/demo/github`, "OpenUI GitHub Demo"),
     body: JSON.stringify({
-      model: GITHUB_DEMO_MODEL,
+      model: llm.resolveModel(GITHUB_DEMO_MODEL),
       stream: true,
       messages: chatMessages,
     }),

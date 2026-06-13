@@ -1,3 +1,4 @@
+import { missingLlmProviderError, resolveLlmProvider } from "@/lib/llm-client";
 import { readFileSync } from "fs";
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
@@ -249,19 +250,16 @@ export async function POST(req: NextRequest) {
   const lastUserMsg = (messages as any[]).filter((m: any) => m.role === "user").pop();
   if (lastUserMsg) conversationLog.push({ role: "user", content: extractText(lastUserMsg) });
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: { message: "OPENROUTER_API_KEY not configured" } },
-      { status: 500 },
-    );
+  const llm = resolveLlmProvider();
+  if (!llm) {
+    return missingLlmProviderError();
   }
 
   const client = new OpenAI({
-    apiKey,
-    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: llm.apiKey,
+    baseURL: llm.chatCompletionsUrl.replace(/\/chat\/completions$/, ""),
   });
-  const MODEL = "openai/gpt-5.4";
+  const MODEL = llm.resolveModel("openai/gpt-5.4");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cleanMessages = (messages as any[])
