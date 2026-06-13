@@ -2,6 +2,7 @@ import {
   createDemoCreditsExhaustedResponse,
   isDemoCreditsExhaustedError,
 } from "@/lib/demo-credits";
+import { missingLlmProviderError, resolveLlmProvider } from "@/lib/llm-client";
 import { BASE_URL } from "@/lib/source";
 import { readFileSync } from "fs";
 import { type NextRequest } from "next/server";
@@ -19,16 +20,16 @@ export async function POST(req: NextRequest) {
 
   conversationLog.push({ role: "user", content: prompt });
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const llm = resolveLlmProvider();
+  if (!llm) {
+    return missingLlmProviderError();
+  }
+
+  const res = await fetch(llm.chatCompletionsUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": `${BASE_URL}/playground`,
-      "X-Title": "OpenUI Playground",
-    },
+    headers: llm.headers(`${BASE_URL}/playground`, "OpenUI Playground"),
     body: JSON.stringify({
-      model,
+      model: llm.resolveModel(model),
       stream: true,
       messages: [
         { role: "system", content: systemPrompt },
